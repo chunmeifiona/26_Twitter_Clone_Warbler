@@ -5,7 +5,7 @@ from flask_debugtoolbar import DebugToolbarExtension
 from sqlalchemy.exc import IntegrityError
 
 from forms import UserAddForm, LoginForm, MessageForm, UserEditForm
-from models import db, connect_db, User, Message
+from models import db, connect_db, User, Message, Likes
 
 CURR_USER_KEY = "curr_user"
 
@@ -48,7 +48,7 @@ def do_login(user):
 
 def do_logout():
     """Logout user."""
-
+    
     if CURR_USER_KEY in session:
         del session[CURR_USER_KEY]
 
@@ -258,6 +258,38 @@ def delete_user():
     return redirect("/signup")
 
 
+@app.route('/users/add_like/<int:message_id>', methods=["POST"])
+def like_message(message_id):
+    """Toggle a liked message(warble)"""
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+
+    message = Message.query.get_or_404(message_id)
+    if message.user_id == g.user.id:
+        return redirect("/")
+
+    if message in g.user.likes:
+        unlike = Likes.query.filter(Likes.message_id==message.id, Likes.user_id==g.user.id).all()
+        for un in unlike:
+            db.session.delete(un)
+    else:
+        like = Likes(user_id=g.user.id, message_id=message_id)
+        db.session.add(like)
+    
+    db.session.commit()
+    return redirect("/")
+
+
+@app.route("/users/<int:user_id>/likes")
+def show_likes(user_id):
+     if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+
+     user = User.query.get_or_404(user_id)
+     return render_template('users/likes.html', user=user, likes=user.likes)   
+
 ##############################################################################
 # Messages routes:
 
@@ -305,7 +337,6 @@ def messages_destroy(message_id):
     db.session.commit()
 
     return redirect(f"/users/{g.user.id}")
-
 
 ##############################################################################
 # Homepage and error pages

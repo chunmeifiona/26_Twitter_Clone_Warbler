@@ -53,8 +53,7 @@
           <button class="
                 btn 
                 btn-sm 
-                btn-primary
-                
+                {{'btn-primary' if msg in g.user.likes else 'btn-secondary'}}
                 ">
             <i class="fa fa-thumbs-up"></i>
           </button>
