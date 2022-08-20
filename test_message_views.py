@@ -48,10 +48,14 @@ class MessageViewTestCase(TestCase):
                                     email="test@test.com",
                                     password="testuser",
                                     image_url=None)
+        self.testuser.id = 11111
 
         db.session.commit()
 
-    def test_add_message(self):
+    def tearDown(self):
+        db.session.rollback()
+        
+    def test_add_message_logged_in(self):
         """Can use add a message?"""
 
         # Since we need to change the session to mimic logging in,
@@ -71,3 +75,74 @@ class MessageViewTestCase(TestCase):
 
             msg = Message.query.one()
             self.assertEqual(msg.text, "Hello")
+
+    def test_delete_message_logged_in(self): 
+        """ can you delete a message?"""
+        m = Message(id=9999, text="delete message", user_id=self.testuser.id)
+        
+        db.session.add(m)
+        db.session.commit()
+
+        with self.client as c:
+            with c.session_transaction() as sess:
+                sess[CURR_USER_KEY] = self.testuser.id
+
+            resp = c.post("/messages/9999/delete", follow_redirects=True)
+            self.assertEqual(resp.status_code, 200)
+
+            msg= Message.query.get(9999)
+            self.assertFalse(msg)
+
+    def test_add_message_logged_out(self):
+        """When you’re logged out, are you prohibited from adding messages?"""
+        with self.client as c: 
+            with c.session_transaction() as sess:
+                sess[CURR_USER_KEY] = None
+
+            resp = c.post("/messages/new", data={"text": "Hello"}, follow_redirects=True)
+            html = resp.get_data(as_text=True)
+            self.assertEqual(resp.status_code, 200)
+            self.assertIn('Access unauthorized', html)
+        
+    def test_delete_message_logged_out(self):
+        """When you’re logged out, are you prohibited from adding messages?"""
+        m = Message(id=9999, text="delete message", user_id=self.testuser.id)
+        
+        db.session.add(m)
+        db.session.commit()
+
+        with self.client as c: 
+            with c.session_transaction() as sess:
+                sess[CURR_USER_KEY] = None
+
+            resp = c.post("/messages/9999/delete", follow_redirects=True)
+            html = resp.get_data(as_text=True)
+            self.assertEqual(resp.status_code, 200)
+            self.assertIn('Access unauthorized', html)
+
+    def test_add_message_another_user(self):
+        """When you’re logged out, are you prohibited from adding messages?"""
+        with self.client as c: 
+            with c.session_transaction() as sess:
+                sess[CURR_USER_KEY] = 22222 #another user
+
+            resp = c.post("/messages/new", data={"text": "Hello"}, follow_redirects=True)
+            html = resp.get_data(as_text=True)
+            self.assertEqual(resp.status_code, 200)
+            self.assertIn('Access unauthorized', html)
+
+    def test_delete_message_another_user(self):
+        """When you’re logged out, are you prohibited from adding messages?"""
+        m = Message(id=9999, text="delete message", user_id=self.testuser.id)
+        
+        db.session.add(m)
+        db.session.commit()
+
+        with self.client as c: 
+            with c.session_transaction() as sess:
+                sess[CURR_USER_KEY] = 22222 #another user
+
+            resp = c.post("/messages/9999/delete", follow_redirects=True)
+            html = resp.get_data(as_text=True)
+            self.assertEqual(resp.status_code, 200)
+            self.assertIn('Access unauthorized', html)
